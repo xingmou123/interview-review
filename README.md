@@ -1,12 +1,28 @@
 # 面试复盘 · interview-review
 
+[下载最新版安装包](https://github.com/xingmou123/interview-review/releases/latest/download/interview-review.zip) · [版本发布与说明](https://github.com/xingmou123/interview-review/releases/latest)
+
 点评已经发生的面试，保留原题、原答、自评和顺序，在对应题目后给出自然、具体的建议。适用于中文嵌入式技术面试和求职沟通。
 
 以真实面试交流为尺度：回答是否抓住重点，面试官能否听懂。答得够用就写“没问题”；确实有缺口，再解释该补什么。不逐字挑无关例外，不重复整句原答，也不把每题都写成一套分析和替换话术。
 
 完整规则见 [SKILL.md](SKILL.md)，点评尺度的具体例子见 [校准案例](references/review-calibration.md)。
 
+复杂题会讲清原理、方案为什么成立及必要的取舍；问测试方法时给出具体条件、操作、预期结果和判断依据。简单确认题保持简短，需要重新组织回答时才给能直接说出口的参考回答，不给每题套固定栏目或自动加学习计划。
+
 ## 安装
+
+首次使用建议下载上面的 `interview-review.zip`。解压后把其中整个 `interview-review` 文件夹放到 Codex 的 `skills` 目录，保留 `agents/`、`references/` 和 `scripts/`，不要只复制 `SKILL.md`。
+
+- Windows 默认目录：`%USERPROFILE%\.codex\skills\interview-review`
+- macOS / Linux 默认目录：`~/.codex/skills/interview-review`
+- 设置了 `CODEX_HOME` 时：放到该目录的 `skills/interview-review` 下
+
+已有同名 Skill 时，先保存自己的修改并备份旧目录，再替换或合并。安装后在新聊天使用 `$interview-review`；尚未识别时重启 Codex，再打开新聊天。
+
+在 [版本发布页](https://github.com/xingmou123/interview-review/releases/latest) 的 Assets 中也能下载安装包及 SHA256 校验文件。若使用 GitHub 自动生成的 Source code ZIP，解压目录可能带分支或版本后缀，安装前把含 `SKILL.md` 的目录改名为 `interview-review`。
+
+也可从仓库安装，取得的是仓库当前已提交版本：
 
 Windows PowerShell：
 
@@ -20,12 +36,6 @@ macOS / Linux：
 git clone https://github.com/xingmou123/interview-review.git ~/.codex/skills/interview-review
 ```
 
-如果设置了 `CODEX_HOME`，将仓库放到该目录的 `skills/interview-review` 下。安装目录已有同名旧版时，先保留自己的修改，再备份旧文件夹或合并更新。
-
-也可以下载仓库 ZIP，解压后将包含 `SKILL.md` 的目录命名为 `interview-review`，放进 skills 目录。
-
-安装后打开一个新任务，使用 `$interview-review` 调用；若尚未识别，重启 Codex 后再打开任务。
-
 ## 使用
 
 将面试记录粘贴进对话，或附上可读取的文件：
@@ -37,6 +47,12 @@ $interview-review
 有问题直接讲清缺什么，不重复引用原答，不逐字挑无关例外。
 ```
 
+普通文字复盘只需面试记录，无需 Python、飞书工具或其他 Skill。可补充简历、项目手稿、代码和岗位要求，帮助判断技术方案及回答重点；没有这些材料也能完成能确定的复盘，个人职责和项目结果只依据已确认内容。
+
+对空回答提供本题该准备的关键点；反问环节评价学员的问题，不把面试官介绍的设备或工作内容当成学员经历。用户已删短、改成没问题或明确清空的建议按最新内容保留。
+
+有音视频时由当前环境的媒体工具分析。仅有转写或只处理部分片段时，会说明覆盖范围；本包不附带语音识别服务。
+
 若希望写回飞书，在请求里明确说明：
 
 ```text
@@ -45,11 +61,15 @@ $interview-review
 保留原题、原答、自评和已有修改。
 ```
 
-飞书读写需要自己的 `lark-cli`、`lark-doc` Skill 和文档权限，本仓库不包含飞书工具或账号配置。暂时没有飞书工具时，可以先粘贴正文进行复盘。
+飞书写回需要自己的 `lark-cli`、登录身份和文档权限；有 `lark-doc` Skill 时可配合读取。发布脚本使用 Python 3.9+ 标准库，无需安装第三方 Python 包。本仓库不包含飞书工具或账号配置，没有工具或权限时先交付本地复盘，并说明尚未同步。
+
+写回规则见 [飞书交付](references/feishu-delivery.md)，补丁格式和命令见 [正文检查与发布](references/publish-check.md)。脚本检查仅覆盖格式和已知句式，作者仍需逐题复核；离线测试通过不等于已完成真实飞书写回。
 
 较大幅度的文字改稿可配合 `humanizer-zh`；它是可选辅助，本仓库不附带该 Skill。普通逐题点评使用本仓库的完整写作规则即可。
 
 ## 更新
+
+通过 ZIP 安装的版本，下载最新安装包，保存自己的改动并备份旧目录后，再替换或合并更新。
 
 通过 Git 安装的版本，可以在保留并处理好自己的本地修改后执行：
 
@@ -58,6 +78,12 @@ git -C "$env:USERPROFILE\.codex\skills\interview-review" pull --ff-only
 ```
 
 macOS / Linux 使用对应的 `~/.codex/skills/interview-review` 路径。更新后在新任务里调用，以便读取最新规则。
+
+## 验证范围
+
+`v2026.10.14` 版本完成了完整 8 题匿名独立试用、3 个缺少材料或工具的情境、17 项离线检查，以及安装包解压和文件一致性核验。原题、原答、自评、顺序与用户清空的建议均得到保留。
+
+这些检查覆盖 Skill 规则、文字复盘和本地发布脚本；真实音视频分析、在线飞书写回与设备实测由各自工具和具体任务另行验证。
 
 ## 提交试用反馈
 
@@ -72,6 +98,9 @@ macOS / Linux 使用对应的 `~/.codex/skills/interview-review` 路径。更新
 - `SKILL.md`：适用范围、点评规则和交付要求。
 - `agents/openai.yaml`：显示名称和调用信息。
 - `references/review-calibration.md`：不含身份信息的校准案例。
+- `references/audio-review.md`：有录音或视频时的核对方式与覆盖范围。
+- `references/feishu-delivery.md`、`references/publish-check.md`：飞书局部写回、正文检查及结果核验。
+- `scripts/review_gate.py`、`scripts/test_review_gate.py`：正文检查和发布入口、离线测试。
 
 改动应来自具体使用反馈。优先修正判断标准，避免因一次案例增加一条普遍禁令。规则修改时检查校准案例是否仍一致；只有案例有助于区分点评好坏时才补充。
 
