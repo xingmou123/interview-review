@@ -1,7 +1,7 @@
 interface:
   display_name: "面试复盘"
-  short_description: "逐题点评已有面试回答，保留原文，通俗讲清原因和改法，篇幅够用就停"
-  default_prompt: "使用 $interview-review 复盘这份面试记录，保留原题、原答、自评和顺序，答得好的写“没问题”，其余用参考回答一样自然、通俗的文风讲清原因和改法，篇幅以读懂、知道怎么改为准。"
+  short_description: "逐题点评已有面试回答，保留原文，说人话讲清真问题，精简不漏关键点"
+  default_prompt: "使用 $interview-review 逐题复盘这份面试记录，保留原题、原答、自评和顺序，用人话讲清真正的问题、原因和改法，不堆术语、不绕；精简只删重复、套话和无关细节，保留关键解释、条件和必要步骤，回答已经够用就只写没问题，不强凑建议。"
 
 policy:
   allow_implicit_invocation: true
