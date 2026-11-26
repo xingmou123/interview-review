@@ -25,6 +25,14 @@ RULES = {
     'production_meta': r'AI\s*生成|内部底稿|制作过程|教师备注|不是另做一个市场薪资判断|以上是按项目结构补的调试示范|讲已实现部分时要',
     'grader_jargon': r'原答|原题',
     'ai_card_wrapper': r'(?:3|5|三|五)分钟[^。！？\n]{0,8}(?:诊断卡|速查卡|复盘卡)|Top\s*\d+\s*必啃|暴露出[两三四五\d]+处(?:关键)?(?:技术)?硬伤|连续出现[两三四五\d]+个硬漏洞|必须落地的硬动作',
+    'audio_audit_tone': r'(?:核对|对照)(?:\d+分钟)?(?:完整)?录音',
+    'corporate_coach_jargon': (
+        r'收口|抓手|赋能|拉通|颗粒度|'
+        r'口述口径|简历口径|对齐口径|统一[^。！？\n]{0,8}口径|协作边界|调低[^。！？\n]{0,4}表述|'
+        r'吃透|补透|亲手推一遍|绝不再出现|'
+        r'(?:形成|跑通|问题|流程|整条链路|链路|回归)闭环|闭环(?:管理|处理|跟进|验收)|'
+        r'(?:真正|项目|实际|推动|必须)落地|落地(?:过|经验|案例|动作)'
+    ),
 }
 
 
@@ -155,13 +163,29 @@ def check(plan):
     colors = review_colors(plan)
     for index, op in enumerate(ops):
         if not isinstance(op, dict) or op.get('command') not in ('block_replace', 'block_insert_after'):
-            raise GateError('Only single-block replace and insert-after are supported')
-        bid = op.get('block_id')
-        if not isinstance(bid, str) or not re.fullmatch(r'[A-Za-z0-9]+', bid) or bid in ids:
-            raise GateError('Each source block must appear once')
-        ids.add(bid)
-        if not isinstance(op.get('expected_text'), str):
-            raise GateError('Expected original text is required')
+            raise GateError('Only block_replace and block_insert_after are supported')
+        is_range = 'start_block_id' in op or 'end_block_id' in op
+        if is_range:
+            if op.get('command') != 'block_replace' or 'block_id' in op:
+                raise GateError('Range target is only valid for block_replace without block_id')
+            sbid, ebid = op.get('start_block_id'), op.get('end_block_id')
+            if (not isinstance(sbid, str) or not re.fullmatch(r'[A-Za-z0-9]+', sbid)
+                    or not isinstance(ebid, str) or not re.fullmatch(r'[A-Za-z0-9]+', ebid)):
+                raise GateError('Valid start_block_id and end_block_id are required')
+            if sbid in ids or ebid in ids:
+                raise GateError('Each source block must appear once')
+            ids.add(sbid)
+            ids.add(ebid)
+            expected_texts = op.get('expected_texts')
+            if not isinstance(expected_texts, list) or not expected_texts or not all(isinstance(t, str) for t in expected_texts):
+                raise GateError('Expected original text list is required for range replace')
+        else:
+            bid = op.get('block_id')
+            if not isinstance(bid, str) or not re.fullmatch(r'[A-Za-z0-9]+', bid) or bid in ids:
+                raise GateError('Each source block must appear once')
+            ids.add(bid)
+            if not isinstance(op.get('expected_text'), str):
+                raise GateError('Expected original text is required')
         nodes = fragment(op.get('content'), *colors)
         for issue in prose_findings([text(n) for n in nodes]):
             findings.append({'operation': index + 1, **issue})
@@ -173,6 +197,17 @@ def check(plan):
             if '——' in prose:
                 findings.append({'operation': index + 1, 'paragraph': paragraph,
                                  'rule': 'em_dash', 'text': text(node)})
+            if prose.count('；') + prose.count(';') >= 2:
+                findings.append({'operation': index + 1, 'paragraph': paragraph,
+                                 'rule': 'semicolon_cram', 'text': text(node)})
+            if len(prose.strip()) > 280:
+                findings.append({'operation': index + 1, 'paragraph': paragraph,
+                                 'rule': 'paragraph_too_dense', 'text': text(node)})
+            for clause in re.split(r'[。！？；;\n]', prose):
+                if len(clause.strip()) > 95:
+                    findings.append({'operation': index + 1, 'paragraph': paragraph,
+                                     'rule': 'sentence_too_long', 'text': text(node)})
+                    break
     return {'passed': not findings, 'plan_sha256': digest(plan), 'operations': len(ops), 'findings': findings,
             'scope': 'format and known prose patterns; semantic review still required'}
 
@@ -225,8 +260,41 @@ class Lark:
         with tempfile.TemporaryDirectory(prefix='interview-review-') as tmp:
             path = Path(tmp) / 'patch.xml'
             path.write_text(operation['content'], encoding='utf-8')
-            return self.call(['docs', '+update', '--doc', document, '--command', operation['command'],
-                             '--block-id', operation['block_id'], '--revision-id', str(revision), '--content', '@' + str(path)])
+            cmd = ['docs', '+update', '--doc', document, '--command', operation['command']]
+            if 'start_block_id' in operation:
+                cmd += ['--start-block-id', operation['start_block_id'], '--end-block-id', operation['end_block_id']]
+            else:
+                cmd += ['--block-id', operation['block_id']]
+            cmd += ['--revision-id', str(revision), '--content', '@' + str(path)]
+            return self.call(cmd)
+
+
+def is_advice_block(node, colors):
+    if node.tag != 'p':
+        return False
+    return text(node).strip().startswith('建议') or any(s.get('text-color') in ('purple', COLOR, *colors) for s in node.iter('span'))
+
+
+def resolve_target_span(nodes, op):
+    index_by_id = {n.get('id'): i for i, n in enumerate(nodes)}
+    if 'start_block_id' in op:
+        sbid, ebid = op['start_block_id'], op['end_block_id']
+        if sbid not in index_by_id or ebid not in index_by_id:
+            raise GateError('Original target block not found')
+        start_idx, end_idx = index_by_id[sbid], index_by_id[ebid]
+        if start_idx > end_idx:
+            raise GateError('Invalid target block range order')
+        span = nodes[start_idx:end_idx + 1]
+        if [text(n) for n in span] != op['expected_texts']:
+            raise GateError('Original target text changed')
+        return start_idx, end_idx, span
+    bid = op['block_id']
+    if bid not in index_by_id:
+        raise GateError('Original target block not found')
+    idx = index_by_id[bid]
+    if text(nodes[idx]) != op['expected_text']:
+        raise GateError('Original target text changed')
+    return idx, idx, [nodes[idx]]
 
 
 def save_audit(folder, name, obj):
@@ -251,14 +319,16 @@ def publish(plan, review, transport, audit_dir):
     revision = before['data']['document']['revision_id']
     if revision != plan['revision']:
         raise GateError('Remote revision changed; re-read user edits and rebuild the plan')
-    lookup = {n.get('id'): n for n in doc_nodes(before)}
+    before_nodes = doc_nodes(before)
+    seen_target_ids = set()
     for op in plan['operations']:
-        if op['block_id'] not in lookup or text(lookup[op['block_id']]) != op['expected_text']:
-            raise GateError('Original target text changed')
-        if op['command'] == 'block_replace':
-            target = lookup[op['block_id']]
-            is_advice = text(target).strip().startswith('建议') or any(s.get('text-color') in ('purple', COLOR, *colors) for s in target.iter('span'))
-            if target.tag != 'p' or not is_advice:
+        _, _, span = resolve_target_span(before_nodes, op)
+        for target in span:
+            tid = target.get('id')
+            if tid in seen_target_ids:
+                raise GateError('Overlapping target blocks across operations')
+            seen_target_ids.add(tid)
+            if op['command'] == 'block_replace' and not is_advice_block(target, colors):
                 raise GateError('Replace only existing advice paragraphs; preserve original questions and answers')
     completed = 0
     for index, op in enumerate(plan['operations'], 1):
@@ -266,13 +336,11 @@ def publish(plan, review, transport, audit_dir):
         if fresh['data']['document']['revision_id'] != revision:
             raise GateError('Concurrent edit detected before write; no automatic retry')
         old_nodes = doc_nodes(fresh)
-        target_index = next(i for i, n in enumerate(old_nodes) if n.get('id') == op['block_id'])
-        if text(old_nodes[target_index]) != op['expected_text']:
-            raise GateError('Target changed before write')
+        start_idx, end_idx, _ = resolve_target_span(old_nodes, op)
         replacement = fragment(op['content'], *colors)
         replaced = op['command'] == 'block_replace'
-        insert_index = target_index if replaced else target_index + 1
-        protected = [n for i, n in enumerate(old_nodes) if not (replaced and i == target_index)]
+        insert_index = start_idx if replaced else end_idx + 1
+        protected = [n for i, n in enumerate(old_nodes) if not (replaced and start_idx <= i <= end_idx)]
         save_audit(audit, f'before-{index:03}.json', fresh)
         response = transport.update(plan['document'], revision, op)
         save_audit(audit, f'write-{index:03}.json', response)

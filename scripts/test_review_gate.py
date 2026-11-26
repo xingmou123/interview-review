@@ -45,12 +45,20 @@ class FakeLark:
     def update(self, document, revision, op):
         assert self.revision == revision
         self.writes += 1
-        old = next(n for n in self.root if n.get('id') == op['block_id'])
-        index = list(self.root).index(old)
-        if op['command'] == 'block_replace':
-            self.root.remove(old)
+        children = list(self.root)
+        if 'start_block_id' in op:
+            s_idx = next(i for i, n in enumerate(children) if n.get('id') == op['start_block_id'])
+            e_idx = next(i for i, n in enumerate(children) if n.get('id') == op['end_block_id'])
+            for old in children[s_idx:e_idx + 1]:
+                self.root.remove(old)
+            index = s_idx
         else:
-            index += 1
+            old = next(n for n in children if n.get('id') == op['block_id'])
+            index = children.index(old)
+            if op['command'] == 'block_replace':
+                self.root.remove(old)
+            else:
+                index += 1
         for j, n in enumerate(gate.fragment(op['content'], *self.colors)):
             n.set('id', f'new{self.writes}p{j}')
             for s in n.iter('span'):
@@ -94,6 +102,14 @@ class ProseTests(unittest.TestCase):
             '考前 5 分钟速查卡：记住这几个公式',
             '这题暴露出三处关键技术硬伤',
             '这里满量程放太大了——平时电流很小',
+            '另外核对 20 分钟完整录音，发现这里卡住了',
+            '对照完整录音，这里没回答上追问',
+            '今晚先把这几题吃透，把公式亲手推一遍',
+            '同时立刻统一简历和口述口径，把架构收口，调低简历表述，绝不再出现否认的情况',
+            '这里要把协作边界补透，真正落地过才敢写',
+            '问题排查要形成闭环，做好闭环管理',
+            '第一点看中断优先级；第二点看 DMA 通道；第三点看缓冲长度',
+            '这里把整个串口接收状态机从空闲中断触发到环形缓冲写指针回绕再到主循环解析校验包头包尾以及异常超时复位全都揉在了一句超过九十五个字的超长说明里，不仅没有分句还没有换行，让学员读到一半根本喘不过气来彻底看晕过去',
         ]
         for value in bad:
             with self.subTest(value=value):
@@ -113,6 +129,8 @@ class ProseTests(unittest.TestCase):
             '先确认输入车速与查表索引，再检查边界处理',
             '这些数据只用于计算平均电流，过流保护仍然使用逐点采样值',
             '这些数据不代表过流故障，需要结合阈值和持续时间判断',
+            '听了一下录音，08:22 这里讲完空闲中断就停住了',
+            '电机控制采用电流闭环和速度闭环串级结构，位置闭环在外层',
         ]
         for value in good:
             with self.subTest(value=value):
@@ -240,6 +258,52 @@ class PublishTests(unittest.TestCase):
         with self.assertRaises(gate.GateError): self.run_publish(fake=fake)
         self.assertEqual(fake.writes, 1)
         self.assertEqual(fake.fetches, 3)
+
+    def test_paragraph_too_dense_rejected(self):
+        dense = '这是一句很短的话。' * 34
+        res = gate.check(plan(dense))
+        self.assertFalse(res['passed'])
+        self.assertEqual(res['findings'][0]['rule'], 'paragraph_too_dense')
+
+    def test_range_replace_purple_advice_and_reject_original_in_range(self):
+        fake = FakeLark()
+        fake.root = ET.fromstring(
+            '<root><h2 id="q1">Q1</h2><p id="a1">回答：原话</p>'
+            '<p id="p1"><span text-color="rgb(100,37,208)">建议：旧建议一</span></p>'
+            '<p id="p2"><span text-color="rgb(100,37,208)">参考回答：旧口述二</span></p>'
+            '<figure id="img1"><source token="diagram"/></figure></root>'
+        )
+        p = {'document': 'TestDocument', 'revision': 4, 'operations': [{
+            'command': 'block_replace',
+            'start_block_id': 'p1',
+            'end_block_id': 'p2',
+            'expected_texts': ['建议：旧建议一', '参考回答：旧口述二'],
+            'content': xml('建议：听了一下录音，这里直接说排查步骤') + xml('参考回答：先查供电，再看时钟'),
+        }]}
+        self.assertTrue(gate.check(p)['passed'])
+        summary = self.run_publish(p, fake=fake)
+        self.assertTrue(summary['passed'])
+        self.assertEqual([gate.text(n) for n in fake.root[:4]], [
+            'Q1', '回答：原话', '建议：听了一下录音，这里直接说排查步骤', '参考回答：先查供电，再看时钟'
+        ])
+        self.assertIsNotNone(next(n for n in fake.root if n.get('id') == 'img1').find('source'))
+
+        # Range spanning non-advice block must be rejected before any write
+        bad_fake = FakeLark()
+        bad_fake.root = ET.fromstring(
+            '<root><p id="a1">回答：原话</p>'
+            '<p id="p1"><span text-color="rgb(100,37,208)">建议：旧建议</span></p></root>'
+        )
+        bad_p = {'document': 'TestDocument', 'revision': 4, 'operations': [{
+            'command': 'block_replace',
+            'start_block_id': 'a1',
+            'end_block_id': 'p1',
+            'expected_texts': ['回答：原话', '建议：旧建议'],
+            'content': xml('建议：新建议'),
+        }]}
+        with self.assertRaises(gate.GateError):
+            self.run_publish(bad_p, fake=bad_fake)
+        self.assertEqual(bad_fake.writes, 0)
 
     def test_readback_wrong_text_color_or_original_change_is_detected(self):
         for fault in ('text', 'color', 'uncolored_tail', 'original'):
