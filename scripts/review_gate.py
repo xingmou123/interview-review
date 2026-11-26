@@ -23,6 +23,8 @@ RULES = {
     'evidence_lecture': r'(?:没有|缺少|缺乏|未提供)[^。！？\n]{0,20}(?:证据|记录|日志|实测)[^。！？\n]{0,35}(?:只能说|只能写|不能说|不能写|不要说)',
     'deferred_answer': r'(?:你|学员|自行|自己)[^。！？\n]{0,12}(?:核对|确认|补充)[^。！？\n]{0,20}(?:配置|实测|数据|证据)[^。！？\n]{0,12}(?:再回答|再说|再填)|(?:配置|数据|实测)[^。！？\n]{0,8}(?:查清楚|核对清楚)[^。！？\n]{0,8}(?:再组织答案|再回答)',
     'production_meta': r'AI\s*生成|内部底稿|制作过程|教师备注|不是另做一个市场薪资判断|以上是按项目结构补的调试示范|讲已实现部分时要',
+    'grader_jargon': r'原答|原题',
+    'ai_card_wrapper': r'(?:3|5|三|五)分钟[^。！？\n]{0,8}(?:诊断卡|速查卡|复盘卡)|Top\s*\d+\s*必啃|暴露出[两三四五\d]+处(?:关键)?(?:技术)?硬伤|连续出现[两三四五\d]+个硬漏洞|必须落地的硬动作',
 }
 
 
@@ -164,9 +166,13 @@ def check(plan):
         for issue in prose_findings([text(n) for n in nodes]):
             findings.append({'operation': index + 1, **issue})
         for paragraph, node in enumerate(nodes, 1):
-            if re.search(r'["“”＂]', text_without_code(node)):
+            prose = text_without_code(node)
+            if re.search(r'["“”＂]', prose):
                 findings.append({'operation': index + 1, 'paragraph': paragraph,
                                  'rule': 'double_quote', 'text': text(node)})
+            if '——' in prose:
+                findings.append({'operation': index + 1, 'paragraph': paragraph,
+                                 'rule': 'em_dash', 'text': text(node)})
     return {'passed': not findings, 'plan_sha256': digest(plan), 'operations': len(ops), 'findings': findings,
             'scope': 'format and known prose patterns; semantic review still required'}
 

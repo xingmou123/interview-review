@@ -13,3 +13,14 @@
 ## 发布前检查
 
 - 按 [正文检查与发布](publish-check.md) 完成当前稿的程序筛查、逐段内容复核，再经 `scripts/review_gate.py` 发布并核验。该文件集中维护补丁、复核摘要、版本核对和失败处理要求；不直接调用 `lark-cli docs +update`，不重放旧脚本，也不把复核过程变成额外的用户批准步骤。
+
+## 按需配图
+
+- 文字已经讲透的题不配图，避免文档臃肿。仅对纯文字极难脑补的复杂时序（如中心对齐 PWM 与采样窗口对齐）、电压/量程标尺映射或整机闭环总览，按需补充 1～3 张清晰、专业、简洁的中文示意图。
+- 需要配图时，统一使用 **Codex 内置 `image_gen`** 生成清晰简洁的专业中文技术示意图（不改用其他生图模型）；涉及严格数值刻度或微秒级波形对齐时，先用脚本生成精确底图，再以该底图为参考交 Codex 内置 `image_gen` 精绘。上传前必须逐张核对成品图，确认所有数字、公式、对齐线无误，无错字乱码、无文字重叠截断、手机端可读。
+- 写入飞书时，使用 `lark-cli docs +media-insert` 上传图片（**严禁传 `--caption` 加“图1：……（对应 Qx）”这类 AI 味图注**；图片内部主标题也只写技术主题本身，不挂“（对应 Q1 / Q6）”“（面试速查）”之类编号副标题），再以 `docs +update --command block_move_after` 精准移至对应题目下方，并回读确认位置正确、原有正文与样式未受任何改动。
+
+## 交付权限与多维表格回写
+
+- 获授权完成复盘副本交付并回写台账时，按团队交付标准一次配置好文档权限，便于审核通过后直接发给学员：调用 `PATCH /open-apis/drive/v2/permissions/:token/public?type=docx` 开启外部链接只读（`external_access_entity="open"`、`link_share_entity="anyone_readable"`）与防复制导出保护（`copy_entity="only_full_access"`、`security_entity="only_full_access"`、`comment_entity="anyone_can_edit"`、`share_entity="same_tenant"`），并调用 `POST /open-apis/drive/v1/permissions/:token/public/password?type=docx` 生成访问密码。
+- 回写多维表格 `复盘链接` 时统一写为 `飞书链接：[文档标题](https://.../docx/<token>)   密码：<password>`，`审核结果` 更新为 `待审核`，写后读回核验权限设置、可点击链接、密码及超时/进度状态。

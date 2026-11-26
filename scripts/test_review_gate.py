@@ -89,6 +89,11 @@ class ProseTests(unittest.TestCase):
             '这是 AI 生成的参考答案',
             '这个数值来自课堂推演，面试时请把它与亲身项目经验分开',
             '先把配置查清楚，再组织答案',
+            '原答只讲了一半，这里漏了偏置原理',
+            '3 分钟本场诊断卡：先看这三点',
+            '考前 5 分钟速查卡：记住这几个公式',
+            '这题暴露出三处关键技术硬伤',
+            '这里满量程放太大了——平时电流很小',
         ]
         for value in bad:
             with self.subTest(value=value):
@@ -112,6 +117,22 @@ class ProseTests(unittest.TestCase):
         for value in good:
             with self.subTest(value=value):
                 self.assertTrue(gate.check(plan(value))['passed'])
+
+    def test_bold_mentor_prefixes_and_natural_intro_pass(self):
+        p = plan()
+        p['operations'][0]['content'] = (
+            '<p><b><span text-color="purple">建议：</span></b>'
+            '<span text-color="purple">这里把分辨率和真实精度混在一起了</span></p>'
+            '<p><b><span text-color="purple">参考回答：</span></b>'
+            '<span text-color="purple">12 位 ADC 理论分辨率是 3.3 V ÷ 4096 ≈ 0.806 mV/LSB</span></p>'
+            '<p><b><span text-color="purple">如果接着追问：</span></b>'
+            '<span text-color="purple">电角度零位偏了 30° 会漏出一半转矩</span></p>'
+        )
+        self.assertTrue(gate.check(p)['passed'])
+        fake = FakeLark()
+        with tempfile.TemporaryDirectory() as tmp:
+            summary = gate.publish(p, reviewed(p), fake, Path(tmp) / 'audit')
+            self.assertTrue(summary['passed'])
 
     def test_rich_text_cannot_split_a_disclaimer(self):
         p = plan()
